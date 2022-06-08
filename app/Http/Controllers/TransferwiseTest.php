@@ -17,10 +17,8 @@ class TransferwiseTest extends Controller
 
     public function getFormFields(Request $request)
     {
-        // return $this->requirements($request->currency);
         $requirements = $this->requirements($request->currency);
-
-        return view('partials.fields', compact('requirements'));
+        return view('partials.fields', ['requirements' => $requirements, 'currency' => $request->currency, 'old' => null, 'activeTab' => $requirements[0]->type]);
     }
 
     public function deleteMember($accountID)
@@ -34,30 +32,23 @@ class TransferwiseTest extends Controller
     private function recepientList()
     {
         $response = Http::withToken(config('services.transferwise.key'))
-            ->get(config('services.transferwise.endpoint') . 'accounts');
+            ->get(config('services.transferwise.endpoint') . 'accounts')
+            ->collect();
+
         return json_decode($response);
     }
 
     public function createRecipient(Request $request)
     {
+        // return $request->all();
         try {
-            $details = [];
-
-            foreach ($request->details as $key => $detail) {
-                $details[$key] = $detail;
-            }
+            $payload = $this->getPayload($request);
 
             $recipient = Http::withToken(config('services.transferwise.key'))
                 ->withHeaders([
                     'Content-Type' => 'application/json',
                 ])
-                ->post(config('services.transferwise.endpoint') . 'accounts', [
-                    'currency' => $request->currency,
-                    'type' => $request->type,
-                    'profile' => config('services.transferwise.profile.personal'),
-                    'accountHolderName' => $request->accountHolderName,
-                    'details' => $details
-                ]);
+                ->post(config('services.transferwise.endpoint') . 'accounts', $payload);
 
             $recipientData = json_decode($recipient);
 
@@ -84,8 +75,49 @@ class TransferwiseTest extends Controller
     {
         $response = Http::withToken(config('services.transferwise.key'))
             ->get(config('services.transferwise.endpoint') . 'account-requirements?source=USD&target=' . $currency . '&sourceAmount=0.01')
-            ->collect();;
+            ->collect();
 
         return json_decode($response);
+    }
+
+    public function childRequirements(Request $request)
+    {
+        $payload = $this->getPayload($request);
+        $response = Http::withToken(config('services.transferwise.key'))
+            ->post(config('services.transferwise.endpoint') . 'account-requirements?source=USD&target=' . $request->currency . '&sourceAmount=0.01', $payload)
+            ->collect();
+
+        return view('partials.fields', ['requirements' => json_decode($response), 'currency' => $request->currency, 'old' => $request, 'activeTab' => $request->type]);
+    }
+
+    private function getPayload(Request $request)
+    {
+        $details = [];
+        $address = [];
+
+        if ($request->details != null && count($request->details) > 0) {
+            foreach ($request->details as $key => $detail) {
+                if ($detail != null) {
+                    if (str_starts_with($key, 'address')) {
+                        $keys = explode('.', $key);
+                        $key = $keys[1];
+
+                        $address[$key] = $detail;
+                    } else {
+                        $details[$key] = $detail;
+                    }
+
+                    $details['address'] = $address;
+                }
+            }
+        }
+
+        return [
+            'type' => $request->type,
+            'profile' => config('services.transferwise.profile.personal'),
+            'accountHolderName' => $request->accountHolderName,
+            'currency' => $request->currency,
+            'details' => $details
+        ];
     }
 }

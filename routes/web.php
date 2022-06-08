@@ -23,6 +23,7 @@ Route::view('/', 'index')->name('index');
 Route::prefix('wise')->as('wise.')->group(function () {
     Route::get('/', [TransferwiseTest::class, 'index'])->name('index');
     Route::post('get-form-fields', [TransferwiseTest::class, 'getFormFields'])->name('getFormFields');
+    Route::post('get-child-fields', [TransferwiseTest::class, 'childRequirements'])->name('getChildFormFields');
     Route::post('create-recipient', [TransferwiseTest::class, 'createRecipient'])->name('createRecipient');
     Route::get('delete/{accountID}', [TransferwiseTest::class, 'deleteMember'])->name('deleteMember');
 });
