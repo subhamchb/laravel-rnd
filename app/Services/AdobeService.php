@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
 use stdClass;
 
@@ -81,61 +82,6 @@ class AdobeService
         });
     }
 
-    private function setupAgreementPayload(Request $request): array
-    {
-        $payload = [
-            "fileInfos" => [
-                [
-                    "libraryDocumentId" => $request->template_id
-                ]
-            ],
-            "name" => $request->name,
-            "participantSetsInfo" => [
-                [
-                    "memberInfos" => [
-                        [
-                            "email" => $request->email
-                        ]
-                    ],
-                    "order" => 1,
-                    "role" => "SIGNER"
-                ]
-            ],
-            "message" => 'Please fill and sign',
-            "signatureType" => "ESIGN",
-            "emailOption" => [
-                "sendOptions" => [
-                    "completionEmails" => "NONE",
-                    "inFlightEmails" => "NONE",
-                    "initEmails" => "NONE"
-                ]
-            ],
-            "state" => "IN_PROCESS"
-        ];
-
-        return $payload;
-    }
-
-    public function createAgreement(Request $request): stdClass
-    {
-        $payload = $this->setupAgreementPayload($request);
-
-        $curl = curl_init();
-        curl_setopt_array($curl, array(
-            CURLOPT_URL => "{$this->BASE_URI}/api/rest/v6/agreements",
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CUSTOMREQUEST => 'POST',
-            CURLOPT_POSTFIELDS => json_encode($payload),
-            CURLOPT_HTTPHEADER => array(
-                "Authorization: Bearer " . $this->getAccessToken(),
-                "Content-Type: application/json"
-            ),
-        ));
-        $response = curl_exec($curl);
-        curl_close($curl);
-        return json_decode($response);
-    }
-
     public function getAgreements(): stdClass
     {
         $curl = curl_init();
@@ -188,5 +134,224 @@ class AdobeService
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => "inline; filename={$filename}"
         ]);
+    }
+
+    public function getTemplateFields(string $id = "CBJCHBCAABAAe31tkxQmz1t5EBrysOndCo7ZtfzAAXYC"): array
+    {
+        $curl = curl_init();
+
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => "{$this->BASE_URI}/api/rest/v6/libraryDocuments/{$id}/formFields",
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => 'GET',
+            CURLOPT_HTTPHEADER => array(
+                "Authorization: Bearer " . $this->getAccessToken()
+            ),
+        ));
+
+        $response = curl_exec($curl);
+
+        curl_close($curl);
+
+        return $this->filterPrefillData(json_decode($response)->fields);
+    }
+
+    private function filterPrefillData(array $data): array
+    {
+        return array_filter(
+            $data,
+            function ($filterable) {
+                return $filterable->assignee === "PREFILL";
+            }
+        );
+    }
+
+    private function setupAgreementPayload(Request $request): array
+    {
+        $mergeData = [];
+
+        if (isset($request->mergedata)) {
+            $mergeData = $this->setupMergeData($request->mergedata);
+        }
+
+        $payload = [
+            "fileInfos" => [
+                [
+                    "libraryDocumentId" => $request->template_id
+                ]
+            ],
+            "name" => $request->name,
+            "participantSetsInfo" => [
+                [
+                    "memberInfos" => [
+                        [
+                            "email" => "legal@abroadworks.com",
+                            "self" => true
+                        ]
+                    ],
+                    "order" => 1,
+                    "role" => "SIGNER"
+                ],
+                [
+                    "memberInfos" => [
+                        [
+                            "email" => $request->email,
+                            "self" => false
+                        ]
+                    ],
+                    "order" => 2,
+                    "role" => "SIGNER"
+                ]
+            ],
+            "mergeFieldInfo" => $mergeData,
+            "message" => 'Please fill and sign',
+            "signatureType" => "ESIGN",
+            "emailOption" => [
+                "sendOptions" => [
+                    "completionEmails" => "NONE",
+                    "inFlightEmails" => "NONE",
+                    "initEmails" => "NONE"
+                ]
+            ],
+            "state" => "DRAFT"
+        ];
+
+        return $payload;
+    }
+
+    public function createAgreement(Request $request): stdClass
+    {
+        $payload = $this->setupAgreementPayload($request);
+
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => "{$this->BASE_URI}/api/rest/v6/agreements",
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => 'POST',
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_HTTPHEADER => array(
+                "Authorization: Bearer " . $this->getAccessToken(),
+                "Content-Type: application/json"
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl);
+
+        $id = json_decode($response)->id;
+
+        $etagForMerge = $this->agreementEtag($id, true);
+        Log::info("etagformerge: " . $etagForMerge);
+
+        $merge = $this->mergeData($id, $etagForMerge, $request->mergedata);
+        Log::info("merge: " . $merge);
+
+        $state = $this->changeAgreementState('IN_PROCESS', $id);
+        Log::info("state: " . $state);
+
+        return json_decode($response);
+    }
+
+    public function mergeData($id, $etag, $data)
+    {
+        $mergeData = [
+            "fieldMergeInfos" => $this->setupMergeData($data)
+        ];
+
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => "{$this->BASE_URI}/api/rest/v6/agreements/{$id}/formFields/mergeInfo",
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => '',
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 0,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => 'PUT',
+            CURLOPT_POSTFIELDS => json_encode($mergeData),
+            CURLOPT_HTTPHEADER => array(
+                "Authorization: Bearer " . $this->getAccessToken(),
+                'Content-Type: application/json',
+                'If-Match: ' . $etag
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl);
+
+        return $response;
+    }
+
+    public function changeAgreementState(string $state, string $id)
+    {
+        $state = [
+            "state" => $state
+        ];
+
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => "{$this->BASE_URI}/api/rest/v6/agreements/{$id}/state",
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => 'PUT',
+            CURLOPT_POSTFIELDS => json_encode($state),
+            CURLOPT_HTTPHEADER => array(
+                "Authorization: Bearer " . $this->getAccessToken(),
+                'Content-Type: application/json',
+                'If-Match: ' . $this->agreementEtag($id)
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl);
+
+        return $response;
+    }
+
+    public function agreementEtag(string $id, $forMerge = false): string
+    {
+        $url = $forMerge ? "{$this->BASE_URI}/api/rest/v6/agreements/{$id}/formFields/mergeInfo" :  "{$this->BASE_URI}/api/rest/v6/agreements/{$id}";
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => 'GET',
+            CURLOPT_HEADER => 1,
+            CURLOPT_HTTPHEADER => array(
+                "Authorization: Bearer " . $this->getAccessToken()
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl);
+
+        return $this->extractEtag($response);
+    }
+
+    private function extractEtag(string $output): string
+    {
+        $out = preg_split('/(\r?\n){2}/', $output, 2);
+        $headers = $out[0];
+        $headersArray = preg_split('/\r?\n/', $headers);
+        $headersArray = array_map(function ($h) {
+            return preg_split('/:\s{1,}/', $h, 2);
+        }, $headersArray);
+
+        $tmp = [];
+        foreach ($headersArray as $h) {
+            $tmp[strtolower($h[0])] = isset($h[1]) ? $h[1] : $h[0];
+        }
+        $headersArray = $tmp;
+        $tmp = null;
+        return $headersArray['etag'];
+    }
+
+    private function setupMergeData(array $data): array
+    {
+        $processedData = [];
+
+        foreach ($data as $key => $value) {
+            $processedData[] = [
+                "defaultValue" => $value,
+                "fieldName" => trim($key, '\'"')
+            ];
+        }
+
+        return $processedData;
     }
 }

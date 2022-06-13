@@ -63,4 +63,10 @@ class AdobeController extends Controller
 
         return view('view-agreement', ['agreement' => $agreement]);
     }
+
+    public function getTemplateFields(Request $request)
+    {
+        // return $this->service->getTemplateFields($request->id);
+        return view('template-fields', ['fields' => $this->service->getTemplateFields($request->id)]);
+    }
 }

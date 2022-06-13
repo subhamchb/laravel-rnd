@@ -16,7 +16,7 @@
             </thead>
 
             <tbody>
-                @if (count($agreements->userAgreementList) > 0)
+                @if (isset($agreements->userAgreementList) && count($agreements->userAgreementList) > 0)
                     @foreach ($agreements->userAgreementList as $agreement)
                         <tr>
                             <td>

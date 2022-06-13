@@ -18,7 +18,9 @@
                             <div class="col">
                                 <div class="form-group">
                                     <label for="template_id">Select template</label>
-                                    <select name="template_id" id="template_id" class="form-control">
+                                    <select name="template_id" id="template_id" class="form-control"
+                                        onchange="getTemplateFields(this.value)">
+                                        <option value="">Select template</option>
                                         @foreach ($templates->libraryDocumentList as $template)
                                             <option value="{{ $template->id }}">{{ $template->name }}</option>
                                         @endforeach
@@ -33,9 +35,7 @@
                                         placeholder="john@doe.com">
                                 </div>
                             </div>
-                        </div>
 
-                        <div class="row mt-4">
                             <div class="col">
                                 <div class="form-group">
                                     <label for="name">Agreement Name</label>
@@ -45,7 +45,11 @@
                             </div>
                         </div>
 
-                        <button type="submit" class="btn btn-dark mt-4">Create agreement</button>
+                        <div id="template-fields" class="mt-4">
+                            <p>Prefill form fields will apprear here when you select a template.</p>
+                        </div>
+
+                        <button type="submit" class="btn btn-dark">Create agreement</button>
                     </form>
                 </div>
             </div>
@@ -54,3 +58,33 @@
         </div>
     </div>
 @endsection
+
+@push('js')
+    <script>
+        const csrfToken = document.head.querySelector("[name~=csrf-token][content]").content;
+
+        function getTemplateFields(id) {
+            fetch('{{ route('adobe.getTemplateFields') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        "X-CSRF-Token": csrfToken
+                    },
+                    body: JSON.stringify({
+                        id: id
+                    })
+                })
+                .then((response) => {
+                    return response.text();
+                })
+                .then(html => {
+                    document.getElementById('template-fields').innerHTML = '';
+                    document.getElementById('template-fields').innerHTML = html;
+                })
+                .catch(function(error) {
+                    console.error('Error:', error);
+                });
+        }
+    </script>
+@endpush

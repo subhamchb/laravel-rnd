@@ -2,10 +2,8 @@
 
 use App\Http\Controllers\AdobeController;
 use App\Http\Controllers\TransferwiseTest;
-use Illuminate\Http\Request;
+use App\Services\AdobeService;
 use Illuminate\Support\Facades\Route;
-use Subhamchbt\OAuth2\AdobeSign;
-use Subhamchbt\Sign\AdobeSign as Sign;
 
 /*
 |--------------------------------------------------------------------------
@@ -35,4 +33,5 @@ Route::prefix('adobe')->as('adobe.')->group(function () {
     Route::get('code-state', [AdobeController::class, 'setCredentials'])->name('setCredentials');
     Route::post('create-agreement', [AdobeController::class, 'createAgreement'])->name('createAgreement');
     Route::get('view-agreement/{id}/status/{status}', [AdobeController::class, 'viewAgreement'])->name('viewAgreement');
+    Route::post('/form-fields', [AdobeController::class, 'getTemplateFields'])->name('getTemplateFields');
 });
