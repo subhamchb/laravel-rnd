@@ -20,7 +20,7 @@
                     @foreach ($agreements->userAgreementList as $agreement)
                         <tr>
                             <td>
-                                @if ($agreement->name !== '')
+                                @if (isset($agreement->name) && $agreement->name !== '')
                                     {{ $agreement->name }} <br>
                                 @else
                                     Not available <br>
