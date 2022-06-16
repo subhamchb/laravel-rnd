@@ -5,7 +5,7 @@
                 <label for="{{ $field->name }}">{{ $field->name }}</label>
                 <input type="text" class="form-control" id="{{ $field->name }}"
                     name="mergedata['{{ $field->name }}']" value="{{ $field->defaultValue }}"
-                    placeholder="{{ $field->name }}@if ($field->validationData != 'NONE') , eg. {{ $field->validationData }} @endif"
+                    placeholder="@if (isset($field->validationData) && $field->validationData != 'NONE') {{ $field->validationData }} @endif"
                     @if ($field->readOnly) readonly @endif @if ($field->required) required @endif>
             </div>
         </div>
