@@ -3,6 +3,8 @@
 use App\Http\Controllers\AdobeController;
 use App\Http\Controllers\TransferwiseTest;
 use App\Services\AdobeService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -33,5 +35,18 @@ Route::prefix('adobe')->as('adobe.')->group(function () {
     Route::get('code-state', [AdobeController::class, 'setCredentials'])->name('setCredentials');
     Route::post('create-agreement', [AdobeController::class, 'createAgreement'])->name('createAgreement');
     Route::get('view-agreement/{id}/status/{status}', [AdobeController::class, 'viewAgreement'])->name('viewAgreement');
-    Route::post('/form-fields', [AdobeController::class, 'getTemplateFields'])->name('getTemplateFields');
+    Route::post('form-fields', [AdobeController::class, 'getTemplateFields'])->name('getTemplateFields');
+
+    Route::post('webhook', function (Request $request) {
+        try {
+            Log::info(json_encode($request->all()));
+            return response()->json(["xAdobeSignClientId" => config('services.adobe.client_id')], 200);
+        } catch (Exception $th) {
+            Log::info($th->getMessage());
+        }
+    });
+
+    Route::get('/create-hook/{id}', function ($id) {
+        return (new AdobeService())->agreementSignedWebhook($id);
+    });
 });

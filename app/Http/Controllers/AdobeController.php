@@ -18,6 +18,10 @@ class AdobeController extends Controller
 
     public function index()
     {
+        if (!Cache::has('adobe.refresh_token')) {
+            return redirect($this->service->getCode());
+        }
+
         return view('adobe', ['templates' => $this->service->getTemplates(), 'agreements' => $this->service->getAgreements()]);
     }
 

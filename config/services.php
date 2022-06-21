@@ -46,7 +46,8 @@ return [
         'client_id' => env('ADOBE_CLIENT_ID'),
         'client_secret' => env('ADOBE_CLIENT_SECRET'),
         'state' => env('ADOBE_STATE'),
-        'redirect_uri' => env('REDIRECT_URI')
+        'redirect_uri' => env('REDIRECT_URI'),
+        'webhook_url' => env('ADOBE_WEBHOOK_URL')
     ],
 
 ];

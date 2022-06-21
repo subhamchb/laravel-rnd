@@ -15,6 +15,7 @@ class AdobeService
     protected $clientSecret;
     protected $redirectURI;
     protected $state;
+    protected $webhook_url;
 
     public function __construct()
     {
@@ -22,11 +23,12 @@ class AdobeService
         $this->clientSecret = config('services.adobe.client_secret');
         $this->redirectURI = config('services.adobe.redirect_uri');
         $this->state = config('services.adobe.state');
+        $this->webhook_url = config('services.adobe.webhook_url');
     }
 
     public function getCode(): string
     {
-        $scope = "user_read:account+user_write:account+user_login:account+agreement_read:account+agreement_write:account+agreement_send:account+widget_read:account+widget_write:account+library_read:account+library_write:account+workflow_read:account+workflow_write:account";
+        $scope = "user_read:account+user_write:account+user_login:account+agreement_read:account+agreement_write:account+agreement_send:account+widget_read:account+widget_write:account+library_read:account+library_write:account+workflow_read:account+workflow_write:account+webhook_read:account+webhook_write:account+webhook_retention:account";
         $url = "{$this->BASE_URI}/public/oauth/v2?redirect_uri={$this->redirectURI}&response_type=code&client_id={$this->clientId}&state={$this->state}&scope={$scope}";
         return $url;
     }
@@ -136,7 +138,7 @@ class AdobeService
         ]);
     }
 
-    public function getTemplateFields(string $id = "CBJCHBCAABAAe31tkxQmz1t5EBrysOndCo7ZtfzAAXYC"): array
+    public function getTemplateFields(string $id): array
     {
         $curl = curl_init();
 
@@ -185,8 +187,8 @@ class AdobeService
                 [
                     "memberInfos" => [
                         [
-                            "email" => "legal@abroadworks.com",
-                            "self" => true
+                            "email" => $request->email,
+                            "self" => false
                         ]
                     ],
                     "order" => 1,
@@ -195,11 +197,11 @@ class AdobeService
                 [
                     "memberInfos" => [
                         [
-                            "email" => $request->email,
-                            "self" => false
+                            "email" => "legal@abroadworks.com",
+                            "self" => true
                         ]
                     ],
-                    "order" => 2,
+                    "order" => 1,
                     "role" => "SIGNER"
                 ]
             ],
@@ -240,18 +242,17 @@ class AdobeService
         $id = json_decode($response)->id;
 
         $etagForMerge = $this->agreementEtag($id, true);
-        Log::info("etagformerge: " . $etagForMerge);
 
-        $merge = $this->mergeData($id, $etagForMerge, $request->mergedata);
-        Log::info("merge: " . $merge);
+        $this->mergeData($id, $etagForMerge, $request->mergedata);
 
-        $state = $this->changeAgreementState('IN_PROCESS', $id);
-        Log::info("state: " . $state);
+        $this->changeAgreementState('IN_PROCESS', $id);
+
+        $this->agreementSignedWebhook($id);
 
         return json_decode($response);
     }
 
-    public function mergeData($id, $etag, $data)
+    public function mergeData(string $id, string $etag, array $data): stdClass | null
     {
         $mergeData = [
             "fieldMergeInfos" => $this->setupMergeData($data)
@@ -261,11 +262,6 @@ class AdobeService
         curl_setopt_array($curl, array(
             CURLOPT_URL => "{$this->BASE_URI}/api/rest/v6/agreements/{$id}/formFields/mergeInfo",
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_ENCODING => '',
-            CURLOPT_MAXREDIRS => 10,
-            CURLOPT_TIMEOUT => 0,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
             CURLOPT_CUSTOMREQUEST => 'PUT',
             CURLOPT_POSTFIELDS => json_encode($mergeData),
             CURLOPT_HTTPHEADER => array(
@@ -277,10 +273,10 @@ class AdobeService
         $response = curl_exec($curl);
         curl_close($curl);
 
-        return $response;
+        return json_decode($response);
     }
 
-    public function changeAgreementState(string $state, string $id)
+    public function changeAgreementState(string $state, string $id): stdClass | null
     {
         $state = [
             "state" => $state
@@ -294,14 +290,14 @@ class AdobeService
             CURLOPT_POSTFIELDS => json_encode($state),
             CURLOPT_HTTPHEADER => array(
                 "Authorization: Bearer " . $this->getAccessToken(),
-                'Content-Type: application/json',
-                'If-Match: ' . $this->agreementEtag($id)
+                "Content-Type: application/json",
+                "If-Match: " . $this->agreementEtag($id)
             ),
         ));
         $response = curl_exec($curl);
         curl_close($curl);
 
-        return $response;
+        return json_decode($response);
     }
 
     public function agreementEtag(string $id, $forMerge = false): string
@@ -323,9 +319,9 @@ class AdobeService
         return $this->extractEtag($response);
     }
 
-    private function extractEtag(string $output): string
+    private function extractEtag(string $response): string
     {
-        $out = preg_split('/(\r?\n){2}/', $output, 2);
+        $out = preg_split('/(\r?\n){2}/', $response, 2);
         $headers = $out[0];
         $headersArray = preg_split('/\r?\n/', $headers);
         $headersArray = array_map(function ($h) {
@@ -353,5 +349,41 @@ class AdobeService
         }
 
         return $processedData;
+    }
+
+    public function agreementSignedWebhook($id)
+    {
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => "{$this->BASE_URI}/api/rest/v6/webhooks",
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => '',
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 0,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => 'POST',
+            CURLOPT_POSTFIELDS => '{
+                "name": "Webform Resource Webhook TESTING-1",
+                "scope": "RESOURCE",
+                "state": "ACTIVE",
+                "resourceType": "AGREEMENT",
+                "resourceId":"' . $id . '",
+                "webhookSubscriptionEvents": [
+                  "AGREEMENT_ALL"
+                ],
+                "webhookUrlInfo": {
+                  "url": "' . $this->webhook_url . '"
+                }
+              }',
+            CURLOPT_HTTPHEADER => array(
+                "Authorization: Bearer " . $this->getAccessToken(),
+                "Content-Type: application/json"
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl);
+
+        return $response;
     }
 }
