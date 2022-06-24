@@ -37,7 +37,7 @@ Route::prefix('adobe')->as('adobe.')->group(function () {
     Route::get('view-agreement/{id}/status/{status}', [AdobeController::class, 'viewAgreement'])->name('viewAgreement');
     Route::post('form-fields', [AdobeController::class, 'getTemplateFields'])->name('getTemplateFields');
 
-    Route::post('webhook', function (Request $request) {
+    Route::any('webhook', function (Request $request) {
         try {
             Log::info(json_encode($request->all()));
             return response()->json(["xAdobeSignClientId" => config('services.adobe.client_id')], 200);
