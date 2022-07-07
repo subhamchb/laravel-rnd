@@ -38,7 +38,7 @@
                             <td>{{ $agreement->status }}</td>
                             <td>{{ $agreement->displayDate }}</td>
                             <td>
-                                <a href="{{ route('adobe.viewAgreement', ['id' => $agreement->id, 'status' => $agreement->status]) }}"
+                                <a href="{{ route('adobe.viewAgreement', ['id' => $agreement->id, 'status' => $agreement->status, 'email' => 'subham.c@voyantcs.com']) }}"
                                     target="_blank"
                                     class="btn btn-dark @if ($agreement->status == 'CANCELLED' || $agreement->status == 'DRAFT') disabled @endif">View
                                     agreement</a>

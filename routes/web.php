@@ -34,7 +34,7 @@ Route::prefix('adobe')->as('adobe.')->group(function () {
     Route::get('/', [AdobeController::class, 'index'])->name('index');
     Route::get('code-state', [AdobeController::class, 'setCredentials'])->name('setCredentials');
     Route::post('create-agreement', [AdobeController::class, 'createAgreement'])->name('createAgreement');
-    Route::get('view-agreement/{id}/status/{status}', [AdobeController::class, 'viewAgreement'])->name('viewAgreement');
+    Route::get('view-agreement/{id}/status/{status}/email/{email}', [AdobeController::class, 'viewAgreement'])->name('viewAgreement');
     Route::post('form-fields', [AdobeController::class, 'getTemplateFields'])->name('getTemplateFields');
 
     Route::any('webhook', function (Request $request) {
@@ -46,7 +46,7 @@ Route::prefix('adobe')->as('adobe.')->group(function () {
         }
     });
 
-    Route::get('/create-hook/{id}', function ($id) {
-        return (new AdobeService())->agreementSignedWebhook($id);
-    });
+    // Route::get('/create-hook/{id}', function ($id) {
+    //     return (new AdobeService())->agreementSignedWebhook($id);
+    // });
 });

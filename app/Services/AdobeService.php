@@ -4,7 +4,6 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
 use stdClass;
 
@@ -100,7 +99,7 @@ class AdobeService
         return json_decode($response);
     }
 
-    public function getAgreement(string $id): stdClass
+    public function getAgreement(string $id, string $email): string | stdClass
     {
         $curl = curl_init();
         curl_setopt_array($curl, array(
@@ -113,7 +112,33 @@ class AdobeService
         ));
         $response = curl_exec($curl);
         curl_close($curl);
-        return json_decode($response);
+
+        $url = $this->extractSigningUrl(json_decode($response)->signingUrlSetInfos, $email);
+
+        if (!$url) {
+            return response()->json([
+                'code' => 'URL_NOT_FOUND',
+                'message' => 'Signing URL not found'
+            ]);
+        }
+
+        return $url;
+    }
+
+    private function extractSigningUrl(array $urlsData, string $email): string | bool
+    {
+        $url = '';
+        foreach ($urlsData as $data) {
+            if ($data->signingUrls[0]->email == $email) {
+                $url = $data->signingUrls[0]->esignUrl;
+            }
+        }
+
+        if ($url == '') {
+            return false;
+        }
+
+        return $url;
     }
 
     public function getSignedAgreementLink(string $id)
@@ -187,8 +212,8 @@ class AdobeService
                 [
                     "memberInfos" => [
                         [
-                            "email" => $request->email,
-                            "self" => false
+                            "email" => "legal@abroadworks.com",
+                            "self" => true
                         ]
                     ],
                     "order" => 1,
@@ -197,8 +222,8 @@ class AdobeService
                 [
                     "memberInfos" => [
                         [
-                            "email" => "legal@abroadworks.com",
-                            "self" => true
+                            "email" => $request->email,
+                            "self" => false
                         ]
                     ],
                     "order" => 1,

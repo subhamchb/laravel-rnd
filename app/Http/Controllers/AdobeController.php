@@ -53,19 +53,19 @@ class AdobeController extends Controller
         }
     }
 
-    public function viewAgreement(string $id, string $status)
+    public function viewAgreement(string $id, string $status, string $email)
     {
         if ($status === "SIGNED") {
             return $this->service->getSignedAgreementLink($id);
         }
 
-        $agreement = $this->service->getAgreement($id);
+        $agreementUrl = $this->service->getAgreement($id, $email);
 
-        if (isset($agreement->code)) {
-            return back()->with('error', $agreement->message);
+        if (isset($agreementUrl->code)) {
+            return back()->with('error', $agreementUrl->message);
         }
 
-        return view('view-agreement', ['agreement' => $agreement]);
+        return view('view-agreement', ['agreementUrl' => $agreementUrl]);
     }
 
     public function getTemplateFields(Request $request)
